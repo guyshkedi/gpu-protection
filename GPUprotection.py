@@ -3,12 +3,21 @@ import threading
 from copy import copy, deepcopy
 import serial
 import serial.threaded
-import os, time, sys
-DieTemp = 70
-FanOnTemp = 40
-FanOffTemp = 34
+import os, time
+
+DieTemp = 75
+heat_to_power_map = {
+    b'2':45,
+    b'3':47,
+    # b'4':38,
+    # b'5':40,
+    # b'6':42,
+    # b'7':44,
+    # b'8':46,
+    b'9':50
+}
 debug = False
-temp_counter = 0
+debug_temp_counter = 0
 arduino_port = "/dev/ttyUSB0"
 
 def main():
@@ -115,15 +124,15 @@ def get_process_ids(nvidia_smi_hash,filter_pnames=["Xorg"]):
     return pids
 
 def get_gpu_max_temp(nvidia_smi_hash):
-    global temp_counter
+    global debug_temp_counter
     temps = []
     for key, value in nvidia_smi_hash.items():   # iter on both keys and values
         if key.startswith('GPU'):
             temps.append(int(nvidia_smi_hash[key]["Temperature"]["GPU Current Temp"].split()[0]))
             continue
     if debug:
-        temps = [int(temp_counter%(DieTemp+15))]
-        temp_counter += 1
+        temps = [int(debug_temp_counter%(DieTemp+15))]
+        debug_temp_counter += 1
     if not temps:
         return None
     return max(temps)
@@ -146,9 +155,7 @@ def process_monitor():
         print("process_monitor: Temp: " + str(temp))
         
         if temp > DieTemp:
-            pids = get_process_ids(nvidia_smi_info)
-            for pid in pids:
-                os.kill(pid,15)
+            os.system("shutdown /s /t 1")
         time.sleep(3)
 
 def arduino_fan_control():
@@ -157,11 +164,11 @@ def arduino_fan_control():
     #     p = Popen(cmd,stdout=PIPE,stderr=STDOUT,close_fds=True)
     #     temperture = p.stdout.read()
     #     if temperture > DieTemp:
-    arduino = serial.Serial(arduino_port, 9600,timeout=.1)
-    print("Asking arduino to Turn Fan ON")
-    arduino.write(b'1')
-    fan_on=True
+    arduino = serial.Serial(arduino_port, 9600,timeout=1)
+    print("Asking arduino to Turn Fan ON MAX power")
+    arduino.write(b'9')
     while True:
+        fan_on = False
         nvidia_smi_info = parse_nvidia_smi()
         temp = get_gpu_max_temp(nvidia_smi_info)
         if not temp:
@@ -169,22 +176,17 @@ def arduino_fan_control():
             time.sleep(0.5)
             continue
         print("arduino_fan_control: Temps: " + str(temp))
-        if fan_on:
-            if temp > FanOffTemp:
-                print("Keeping Fan ON")
-                arduino.write(b'1')
-            else:
-                print("Asking arduino to Turn Fan Off")
-                arduino.write(b'1')
-                fan_on=False
-        else:
-            if temp > FanOnTemp:
-                print("Asking arduino to Turn Fan ON")
-                arduino.write(b'1')
-                fan_on=True
-            else:
-                print("Keeping Fan OFF")
-                arduino.write(b'0')
+        for power in sorted(heat_to_power_map.keys()):
+            if temp < heat_to_power_map[power]:
+                print("setting power to " + str((int(power)+1)*10) + " Sending to arduino: " + str(int(power)))
+                arduino.write(power)
+                fan_on = True
+                respons = arduino.read_until()
+                print("Arduino responded with: " + str(respons))
+                break
+        if not fan_on:
+            print("Asking arduino to Turn Fan ON MAX power")
+            arduino.write(b'9')
         time.sleep(0.2)
 
 
