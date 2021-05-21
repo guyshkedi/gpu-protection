@@ -168,7 +168,7 @@ def arduino_fan_control():
     print("Asking arduino to Turn Fan ON MAX power")
     arduino.write(b'9')
     while True:
-        fan_on = False
+        #fan_on = False
         nvidia_smi_info = parse_nvidia_smi()
         temp = get_gpu_max_temp(nvidia_smi_info)
         if not temp:
@@ -176,17 +176,28 @@ def arduino_fan_control():
             time.sleep(0.5)
             continue
         print("arduino_fan_control: Temps: " + str(temp))
-        for power in sorted(heat_to_power_map.keys()):
-            if temp < heat_to_power_map[power]:
-                print("setting power to " + str((int(power)+1)*10) + " Sending to arduino: " + str(int(power)))
-                arduino.write(power)
-                fan_on = True
-                respons = arduino.read_until()
-                print("Arduino responded with: " + str(respons))
-                break
-        if not fan_on:
-            print("Asking arduino to Turn Fan ON MAX power")
-            arduino.write(b'9')
+        power = temp - 35
+        power = max(0,power)
+        power = power * power
+        power = 76 + int(power * (255.0/400))
+        power = str(min(255, power)).rjust(3,'0') + '-'
+        print("Sending to arduino " + power,end='')
+
+        arduino.write(power.encode())
+        print(" .")
+        respons = arduino.read_until()
+        print("Arduino responded with: " + str(respons))
+        # for power in sorted(heat_to_power_map.keys()):
+        #     if temp < heat_to_power_map[power]:
+        #         print("setting power to " + str((int(power)+1)*10) + " Sending to arduino: " + str(int(power)))
+        #         arduino.write(power)
+        #         fan_on = True
+        #         respons = arduino.read_until()
+        #         print("Arduino responded with: " + str(respons))
+        #         break
+        # if not fan_on:
+        #     print("Asking arduino to Turn Fan ON MAX power")
+        #     arduino.write(b'9')
         time.sleep(0.2)
 
 
