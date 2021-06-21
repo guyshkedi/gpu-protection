@@ -1,5 +1,6 @@
 const int fanControlPin = 11;
-unsigned long start_time;
+unsigned long start_time, current_time;
+unsigned long println_start_time;
 int max_wait_time = 3;
 String data_recieved = "000";
 int power = 255;
@@ -16,7 +17,13 @@ void setup() {
 // the loop function runs over and over again forever
 void loop() {
   start_time = millis();
-  while (millis() - start_time < max_wait_time * 1000) {
+  println_start_time = start_time;
+  current_time = start_time;
+  while (current_time - start_time < max_wait_time * 1000) {
+    if (current_time - println_start_time > 1 * 1000) {
+      println_start_time = current_time;
+      Serial.println(power);
+    }
     if(Serial.available() > 0) {
       start_time = millis();
       multiplier = 100;
@@ -34,11 +41,12 @@ void loop() {
       //Serial.print("Calculated Power: ");
       //Serial.println(power);
       
-      Serial.print("Power is 0-255: ");
       Serial.println(power);
       analogWrite(fanControlPin,power);
     }
+    current_time = millis();
   }
+  power = 255;
   //Serial.println("No response. turning ON.");
-  digitalWrite(fanControlPin,255);
+  digitalWrite(fanControlPin,power);
 }

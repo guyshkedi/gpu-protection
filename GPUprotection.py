@@ -123,8 +123,10 @@ def get_process_ids(nvidia_smi_hash,filter_pnames=["Xorg"]):
             continue
     return pids
 
-def get_gpu_max_temp(nvidia_smi_hash):
+def get_gpu_max_temp(nvidia_smi_hash=None):
     global debug_temp_counter
+    if not nvidia_smi_hash:
+        nvidia_smi_hash = parse_nvidia_smi()
     temps = []
     for key, value in nvidia_smi_hash.items():   # iter on both keys and values
         if key.startswith('GPU'):
@@ -166,7 +168,7 @@ def arduino_fan_control():
     #     if temperture > DieTemp:
     arduino = serial.Serial(arduino_port, 9600,timeout=1)
     print("Asking arduino to Turn Fan ON MAX power")
-    arduino.write(b'9')
+    arduino.write(b'255-')
     while True:
         #fan_on = False
         nvidia_smi_info = parse_nvidia_smi()
