@@ -6,6 +6,7 @@ import serial.threaded
 import os, time
 
 DieTemp = 75
+min_speed = 67 # 67/255
 heat_to_power_map = {
     b'2':45,
     b'3':47,
@@ -48,10 +49,14 @@ def threadwrap(threadfunc):
 def parse_nvidia_smi():
     nvidia_smi_query_all = ["nvidia-smi", "-q", "-a"]
     attribute_exceptions = ["HW Slowdown"]
-    p = Popen(nvidia_smi_query_all,stdout=PIPE,stderr=STDOUT,close_fds=True)
-    info = p.stdout.read()
+    try:
+        p = Popen(nvidia_smi_query_all,stdout=PIPE,stderr=STDOUT,close_fds=True)
+        info = p.stdout.read().decode("utf-8")
+    except Exception as e:
+        print(e)
+        info = ""
     ret_hash = {}
-    for line in info.decode("utf-8").split('\n'):
+    for line in info.split('\n'):
         if not line or line.startswith("="):
             continue
         indent_lvl = (len(line) - len(line.lstrip()))/4
@@ -175,13 +180,24 @@ def arduino_fan_control():
         temp = get_gpu_max_temp(nvidia_smi_info)
         if not temp:
             print("arduino_fan_control: No temperture found?")
+            power = str(min_speed).rjust(3,'0') + '-'
+            print("Sending to arduino " + power,end='')
+            arduino.write(power.encode())
+            print(" .")
+            respons = arduino.read_until()
+            print("Arduino responded with: " + str(respons))
             time.sleep(0.5)
             continue
         print("arduino_fan_control: Temps: " + str(temp))
+        #using Formula of:
+        #min(((max(0,x-35))^{2})*0.2+67,255)
+        # 0.2X^2 + 67 = y
+        # so we are starting on 26% (67 power) and increasing it exponentially once we get to 35 Degrees
+        # climing to 100% (255 power) at ~65.8 Degrees
         power = temp - 35
         power = max(0,power)
         power = power * power
-        power = 76 + int(power * (255.0/400))
+        power = min_speed + int(power * (0.2))
         power = str(min(255, power)).rjust(3,'0') + '-'
         print("Sending to arduino " + power,end='')
 
